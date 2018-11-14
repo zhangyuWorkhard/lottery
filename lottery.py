@@ -64,11 +64,18 @@ def check_prize(list_d):
                 checked_red.append(index)
                 break
     #check blue
+    #for index in check_number_blue:
+    #    for x in list_d["blue"]:
+    #        if index == x:
+    #            checked_blue.append(index)
+    #            break
+    map(f_check_blue, list_d["blue"])
+    
+def f_check_blue(number):
     for index in check_number_blue:
-        for x in list_d["blue"]:
-            if index == x:
-                checked_blue.append(index)
-                break
+        if index == number:
+            checked_blue.append(number)
+            return number
 
 def check_30_times_award_number():
     print "chack prize..."
