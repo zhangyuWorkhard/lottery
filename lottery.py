@@ -15,14 +15,20 @@ import schedule
 CHECK_MODE = 3
 #set you ifttt key
 IFTTT_KEY = ''
+#message type
+MESSAGE_AWARD_NUMBER = 0
+MESSAGE_COUNT15 = 1
+
 #default number
-check_number_red = ['05', '18', '27', '30', '32']
-check_number_blue = ['05', '10']
+check_number_red = []
+check_number_blue = []
 
 prizeData = [] 
 checked_red = []
 checked_blue = []
-pre_number = ''
+pre_award_number = ''
+f_award_number_start = 0
+f_award_number_count = 0
 
 def get_prize_data():
     print "get data form chart.lottery.gov.cn..."
@@ -37,10 +43,13 @@ def get_prize_data():
     return pageCode 
 
 def create_list(obj):
+    global f_award_number_count
     if type(obj) is bs4.element.Tag:
         #find Issue and get number
         if len(obj.select('.Issue')) > 0:
             tmpDate = {"NO":obj.select('.Issue')[0].string, "red":[], "blue":[]}
+            if int(tmpDate["NO"]) >= f_award_number_start:
+                f_award_number_count += 1
             #print(obj.select('.Issue')[0].string)
             for item in obj.select('.B_1'):
                 tmpDate["red"].append(item.string)
@@ -86,11 +95,17 @@ def check_30_times_award_number():
         print prizeData[i]["NO"], checked_red, checked_blue
 
 def check_latest_award_number():
+    global f_award_number_count
+    global f_award_number_start
     soup = BeautifulSoup(get_prize_data(), 'html.parser', from_encoding = 'gb2312')
     print "analysis data..."
     create_list(soup.tr)
     if check_latest_prize_result():
-        send_message_to_ifttt(prizeData[-1]["NO"])
+        send_message_to_ifttt(MESSAGE_AWARD_NUMBER)
+    if  f_award_number_count == 15:
+        f_award_number_count = 0
+        f_award_number_start = int(prizeData[-1]["NO"])
+        send_message_to_ifttt(MESSAGE_COUNT15)
     del prizeData[:]
     soup.decompose()
 
@@ -122,16 +137,21 @@ def check_latest_prize_result():
         return True
     return False
 
-def send_message_to_ifttt(number):
-    global pre_number
-    print "send message to ifttt..."
+def send_message_to_ifttt(message_type):
+    global pre_award_number
     ifttt_webhook_url = 'https://maker.ifttt.com/trigger/lottery/with/key/' + IFTTT_KEY
-    tmp = {'value1': number, 'value2': checked_red, 'value3': checked_blue}
-    if pre_number != number:
+    print "send message to ifttt..."
+    if message_type == MESSAGE_AWARD_NUMBER:
+        tmp = {'value1': prizeData[-1]["NO"], 'value2': checked_red, 'value3': checked_blue}
+        if pre_award_number != prizeData[-1]["NO"]:
+            requests.post(ifttt_webhook_url, json = tmp)
+            pre_award_number = prizeData[-1]["NO"]
+            return
+    elif message_type == MESSAGE_COUNT15:
+        tmp = {'value1': prizeData[-1]["NO"], 'value2': "it's time to buy a new lottery"}
         requests.post(ifttt_webhook_url, json = tmp)
-        pre_number = number
         return
-    print "same number, do not send..."
+    print "same award_number, do not send..."
     return
 
 if __name__ == '__main__':
