@@ -1,4 +1,5 @@
-#lottery
+#!/usr/bin/python
+# -*- coding:utf-8 -*-
 
 from bs4 import BeautifulSoup
 
@@ -7,6 +8,7 @@ import bs4
 import requests
 import time
 import schedule
+import json
 
 #check mode 
 #1: check latest by timer 3600s and if win a prize then send message to ifttt 
@@ -18,6 +20,9 @@ IFTTT_KEY = ''
 #message type
 MESSAGE_AWARD_NUMBER = 0
 MESSAGE_COUNT15 = 1
+#Notify mode
+NOTIFY_BY_IFTTT = 0
+NOTIFY_BY_PHONENUMBER = 1
 
 #default number
 check_number_red = []
@@ -26,9 +31,7 @@ check_number_blue = []
 prizeData = [] 
 checked_red = []
 checked_blue = []
-pre_award_number = ''
 f_award_number_start = 0
-f_award_number_count = 0
 
 def get_prize_data():
     print "get data form chart.lottery.gov.cn..."
@@ -43,13 +46,10 @@ def get_prize_data():
     return pageCode 
 
 def create_list(obj):
-    global f_award_number_count
     if type(obj) is bs4.element.Tag:
         #find Issue and get number
         if len(obj.select('.Issue')) > 0:
             tmpDate = {"NO":obj.select('.Issue')[0].string, "red":[], "blue":[]}
-            if int(tmpDate["NO"]) >= f_award_number_start:
-                f_award_number_count += 1
             #print(obj.select('.Issue')[0].string)
             for item in obj.select('.B_1'):
                 tmpDate["red"].append(item.string)
@@ -95,26 +95,45 @@ def check_30_times_award_number():
         print prizeData[i]["NO"], checked_red, checked_blue
 
 def check_latest_award_number():
-    global f_award_number_count
     global f_award_number_start
+    global check_number_red
+    global check_number_blue
     soup = BeautifulSoup(get_prize_data(), 'html.parser', from_encoding = 'gb2312')
     print "analysis data..."
     create_list(soup.tr)
-    if check_latest_prize_result():
-        send_message_to_ifttt(MESSAGE_AWARD_NUMBER)
-    if  f_award_number_count == 15:
-        f_award_number_count = 0
-        f_award_number_start = int(prizeData[-1]["NO"])
-        send_message_to_ifttt(MESSAGE_COUNT15)
+    #get user data
+    jsonData = get_user_data()
+    for x in jsonData["data"]:
+        check_number_red = x["red"]
+        check_number_blue = x["blue"]
+
+        print "check last prize result..." + x["name"]
+        if check_latest_prize_result():
+            if x["NotifyMode"] == NOTIFY_BY_IFTTT:
+                IFTTT_KEY = x["key"]
+                send_message_to_ifttt(MESSAGE_AWARD_NUMBER)
+            elif x["NotifyMode"] == NOTIFY_BY_PHONENUMBER:
+                #send by phone number
+                print "1"
+        #check start number
+        if check_start_number(x["startNO"]):
+            x["startNO"] = int(prizeData[-1]["NO"])
+            if x["NotifyMode"] == NOTIFY_BY_IFTTT:
+                IFTTT_KEY = x["key"]
+                send_message_to_ifttt(MESSAGE_COUNT15)
+            elif x["NotifyMode"] == NOTIFY_BY_PHONENUMBER:
+                #send by phone number
+                print "1"
+    save_user_data(jsonData)            
     del prizeData[:]
     soup.decompose()
 
 def main():
     if CHECK_MODE == 1:
         #1:run with schedule
-        schedule.every().monday.at("22:00").do(check_latest_award_number) 
-        schedule.every().wednesday.at("22:00").do(check_latest_award_number) 
-        schedule.every().saturday.at("22:00").do(check_latest_award_number) 
+        schedule.every().tuesday.at("8:00").do(check_latest_award_number) 
+        schedule.every().thursday.at("8:00").do(check_latest_award_number) 
+        schedule.every().sunday.at("8:00").do(check_latest_award_number) 
         while True:
             schedule.run_pending()
             time.sleep(60)
@@ -130,7 +149,6 @@ def main():
     print "check end!"
 
 def check_latest_prize_result():
-    print "check last prize result..."
     check_prize(prizeData[-1])
     print prizeData[-1]["NO"], checked_red, checked_blue
     if (len(checked_red) + len(checked_blue) > 2) or (len(checked_blue) == 2):
@@ -138,21 +156,35 @@ def check_latest_prize_result():
     return False
 
 def send_message_to_ifttt(message_type):
-    global pre_award_number
     ifttt_webhook_url = 'https://maker.ifttt.com/trigger/lottery/with/key/' + IFTTT_KEY
     print "send message to ifttt..."
     if message_type == MESSAGE_AWARD_NUMBER:
         tmp = {'value1': prizeData[-1]["NO"], 'value2': checked_red, 'value3': checked_blue}
-        if pre_award_number != prizeData[-1]["NO"]:
-            requests.post(ifttt_webhook_url, json = tmp)
-            pre_award_number = prizeData[-1]["NO"]
-            return
+        requests.post(ifttt_webhook_url, json = tmp)
+        return
     elif message_type == MESSAGE_COUNT15:
         tmp = {'value1': prizeData[-1]["NO"], 'value2': "it's time to buy a new lottery"}
         requests.post(ifttt_webhook_url, json = tmp)
         return
     print "same award_number, do not send..."
     return
+
+def get_user_data():
+    with open("data.json", "r") as f:
+        return json.load(f)
+
+def save_user_data(data):
+    with open("data.json","w") as dump_f:
+        json.dump(data,dump_f)
+
+def check_start_number(start_number):
+    count = 0
+    for x in prizeData:
+        if x["NO"] >= start_number:
+            count += 1
+            if count == 15:
+               return True 
+    return False       
 
 if __name__ == '__main__':
     main()
