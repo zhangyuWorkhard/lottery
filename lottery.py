@@ -98,6 +98,7 @@ def check_latest_award_number():
     global f_award_number_start
     global check_number_red
     global check_number_blue
+    global IFTTT_KEY
     soup = BeautifulSoup(get_prize_data(), 'html.parser', from_encoding = 'gb2312')
     print "analysis data..."
     create_list(soup.tr)
@@ -156,6 +157,7 @@ def check_latest_prize_result():
     return False
 
 def send_message_to_ifttt(message_type):
+    global IFTTT_KEY
     ifttt_webhook_url = 'https://maker.ifttt.com/trigger/lottery/with/key/' + IFTTT_KEY
     print "send message to ifttt..."
     if message_type == MESSAGE_AWARD_NUMBER:
@@ -180,7 +182,7 @@ def save_user_data(data):
 def check_start_number(start_number):
     count = 0
     for x in prizeData:
-        if x["NO"] >= start_number:
+        if int(x["NO"]) >= start_number:
             count += 1
             if count == 15:
                return True 
